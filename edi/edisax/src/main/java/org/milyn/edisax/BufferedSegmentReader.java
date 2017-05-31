@@ -296,15 +296,15 @@ public class BufferedSegmentReader {
         String escape = currentDelimiters.getEscape();
         int escapeLen = escape != null ? escape.length() : 0;
         boolean ignoreCRLF;
-
+        
         int c = readChar();
 
         // Ignoring of new lines can be set as part of the segment delimiter, or
         // as a feature on the parser (the later is the preferred method)...
         ignoreCRLF = (currentDelimiters.ignoreCRLF() || ignoreNewLines);
-
+        
         if(clearBuffer) {
-            segmentBuffer.setLength(0);
+        	segmentBuffer.setLength(0);
         }
         currentSegmentFields = null;
 
@@ -317,11 +317,9 @@ public class BufferedSegmentReader {
         // Ignore leading whitespace on a segment...
         c = forwardPastWhitespace(c);
 
-        boolean escapingMode = false;
-
         // Read the next segment...
         while(c != -1) {
-            char theChar = (char) c;
+        	char theChar = (char) c;
 
             if (ignoreCRLF && (theChar == '\n' || theChar == '\r')) {
                 c = readChar();
@@ -329,40 +327,63 @@ public class BufferedSegmentReader {
             }
 
             segmentBuffer.append((char)c);
-
+            
             int segLen = segmentBuffer.length();
             if(segLen >= delimiterLen) {
-                boolean reachedSegEnd = true;
+            	boolean reachedSegEnd = true;
+            	
+	            for(int i = 0; i < delimiterLen; i++) {
+	            	char segChar = segmentBuffer.charAt(segLen - 1 - i);
+	            	char delimChar = segmentDelimiter[delimiterLen - 1 - i];
+	            	
+	            	if(segChar != delimChar) {
+	            		// Not the end of a segment
+	            		reachedSegEnd = false;
+	            		break;
+	            	}
 
-                for(int i = 0; i < delimiterLen; i++) {
-                    char segChar = segmentBuffer.charAt(segLen - 1 - i);
-                    char delimChar = segmentDelimiter[delimiterLen - 1 - i];
+                    // Do not separate segment if escape character occurs.
+	            	int escapeIndex = segLen - 1 - i - escapeLen;
+                    if (escapeIndex > -1 && escape != null) {
+                        String escapeString = segmentBuffer.substring(escapeIndex, escapeIndex + escapeLen);
+                        
+                        if (escape.equals(escapeString)) {
 
-                    if (escapingMode) {
-                        if (segChar == delimChar) {
-                            segmentBuffer = segmentBuffer.delete(segLen - 2, segLen - 1);
+                        	int escapesCount = 1;
+                        	String precedingEscapeString = escapeIndex - escapeLen > -1 ? segmentBuffer.substring(escapeIndex - escapeLen, escapeIndex) : "";
+                        	while (escape.equals(precedingEscapeString)) {
+                        		escapesCount++;
+                        		escapeIndex = escapeIndex - escapeLen;
+                        		precedingEscapeString = escapeIndex - escapeLen > -1 ? segmentBuffer.substring(escapeIndex - escapeLen, escapeIndex) : "";
+                        	}
+                        	if (escapesCount % 2 == 0) {
+                        		for (int j = 0; j < escapesCount % 2; j++) {
+                        			segmentBuffer = segmentBuffer.delete(escapeIndex, escapeIndex + escapeLen);
+                        			escapeIndex += escapeLen;
+                        		}
+                        	} else {
+                        		for (int j = 0; j < (escapesCount - 1) % 2; j++) {
+                        			segmentBuffer = segmentBuffer.delete(escapeIndex, escapeIndex + escapeLen);
+                        			escapeIndex += escapeLen;
+                        		}
+                        		segmentBuffer = segmentBuffer.delete(escapeIndex, escapeIndex + escapeLen);
+                        		reachedSegEnd = false;
+                        		break;
+                        		
+                        	}
+                        	
                         }
-                        escapingMode = false;
-                        reachedSegEnd = false;
-                        break;
-                    } else if (escape != null && escape.equals(Character.toString(segChar))) {
-                        escapingMode = true;
-                    }
-
-                    if (segChar != delimChar) {
-                        // Not the end of a segment
-                        reachedSegEnd = false;
-                        break;
+                        
                     }
 
                 }
-
-                // We've reached the end of a segment...
-                if(reachedSegEnd) {
-                    // Trim off the delimiter and break out...
-                    segmentBuffer.setLength(segLen - delimiterLen);
+	            
+	            // We've reached the end of a segment...
+	            if(reachedSegEnd) {
+	            	// Trim off the delimiter and break out...
+	            	segmentBuffer.setLength(segLen - delimiterLen);
                     break;
-                }
+	            }
             }
 
             c = readChar();
@@ -371,13 +392,13 @@ public class BufferedSegmentReader {
         if(logger.isDebugEnabled()) {
             logger.debug(segmentBuffer.toString());
         }
-
+        
         currentSegmentNumber++;
 
         if(segmentListener != null) {
-            return segmentListener.onSegment(this);
+        	return segmentListener.onSegment(this);
         } else {
-            return true;
+        	return true;
         }
     }
 
